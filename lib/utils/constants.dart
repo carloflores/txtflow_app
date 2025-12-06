@@ -7,6 +7,7 @@ class AppConstants {
   static const String keyApiUrl = 'api_url';
   static const String keyWhitelist = 'whitelist';
   static const String keyPollingInterval = 'polling_interval';
+  static const String keyCustomHeaders = 'custom_headers';
   
   // Default Values
   static const String defaultApiUrl = 'https://yo.hellotap.app';

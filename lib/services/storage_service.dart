@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 
@@ -34,6 +35,23 @@ class StorageService {
 
   Future<void> setPollingInterval(int seconds) async {
     await _prefs.setInt(AppConstants.keyPollingInterval, seconds);
+  }
+
+  Map<String, String> get customHeaders {
+    final String? jsonString = _prefs.getString(AppConstants.keyCustomHeaders);
+    if (jsonString == null || jsonString.isEmpty) {
+      return {};
+    }
+    try {
+      final Map<String, dynamic> decoded = jsonDecode(jsonString);
+      return decoded.map((key, value) => MapEntry(key, value.toString()));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  Future<void> setCustomHeaders(Map<String, String> headers) async {
+    await _prefs.setString(AppConstants.keyCustomHeaders, jsonEncode(headers));
   }
 
   List<String> get logs => _prefs.getStringList('app_logs') ?? [];

@@ -16,6 +16,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _urlController;
   late TextEditingController _whitelistController;
   late TextEditingController _intervalController;
+  late Map<String, String> _customHeaders;
 
   @override
   void initState() {
@@ -24,6 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlController = TextEditingController(text: provider.storage.apiUrl);
     _whitelistController = TextEditingController(text: provider.storage.whitelist.join(', '));
     _intervalController = TextEditingController(text: provider.storage.pollingInterval.toString());
+    _customHeaders = Map<String, String>.from(provider.storage.customHeaders);
   }
 
   @override
@@ -32,6 +34,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _whitelistController.dispose();
     _intervalController.dispose();
     super.dispose();
+  }
+
+  void _addHeader() {
+    showDialog(
+      context: context,
+      builder: (context) => _HeaderDialog(
+        onSave: (key, value) {
+          setState(() {
+            _customHeaders[key] = value;
+          });
+        },
+      ),
+    );
+  }
+
+  void _editHeader(String key, String value) {
+    showDialog(
+      context: context,
+      builder: (context) => _HeaderDialog(
+        initialKey: key,
+        initialValue: value,
+        onSave: (newKey, newValue) {
+          setState(() {
+            if (newKey != key) {
+              _customHeaders.remove(key);
+            }
+            _customHeaders[newKey] = newValue;
+          });
+        },
+      ),
+    );
+  }
+
+  void _deleteHeader(String key) {
+    setState(() {
+      _customHeaders.remove(key);
+    });
   }
 
   @override
@@ -43,7 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppConstants.surfaceColor,
         foregroundColor: Colors.white,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
@@ -100,6 +139,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               const SizedBox(height: 24),
+              
+              // Custom Headers Section
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppConstants.surfaceColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade800),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Custom Headers',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _addHeader,
+                          icon: const Icon(Icons.add_circle, color: AppConstants.accentColor),
+                          tooltip: 'Add Header',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Add custom headers like Authorization, API-Key, etc.',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_customHeaders.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: const Center(
+                          child: Text(
+                            'No custom headers configured',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _customHeaders.length,
+                        separatorBuilder: (_, __) => const Divider(color: Colors.grey, height: 1),
+                        itemBuilder: (context, index) {
+                          final key = _customHeaders.keys.elementAt(index);
+                          final value = _customHeaders[key]!;
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              key,
+                              style: const TextStyle(
+                                color: AppConstants.primaryColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            subtitle: Text(
+                              _maskValue(value),
+                              style: const TextStyle(color: Colors.grey),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  onPressed: () => _editHeader(key, value),
+                                  icon: const Icon(Icons.edit, color: Colors.grey, size: 20),
+                                  tooltip: 'Edit',
+                                ),
+                                IconButton(
+                                  onPressed: () => _deleteHeader(key),
+                                  icon: const Icon(Icons.delete, color: AppConstants.errorColor, size: 20),
+                                  tooltip: 'Delete',
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 24),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppConstants.primaryColor,
@@ -118,6 +250,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _urlController.text,
                       whitelist,
                       interval,
+                      customHeaders: _customHeaders,
                     );
                     
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -152,6 +285,127 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  String _maskValue(String value) {
+    if (value.length <= 8) {
+      return '••••••••';
+    }
+    return '${value.substring(0, 4)}••••${value.substring(value.length - 4)}';
+  }
+}
+
+class _HeaderDialog extends StatefulWidget {
+  final String? initialKey;
+  final String? initialValue;
+  final Function(String key, String value) onSave;
+
+  const _HeaderDialog({
+    this.initialKey,
+    this.initialValue,
+    required this.onSave,
+  });
+
+  @override
+  State<_HeaderDialog> createState() => _HeaderDialogState();
+}
+
+class _HeaderDialogState extends State<_HeaderDialog> {
+  late TextEditingController _keyController;
+  late TextEditingController _valueController;
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _keyController = TextEditingController(text: widget.initialKey ?? '');
+    _valueController = TextEditingController(text: widget.initialValue ?? '');
+  }
+
+  @override
+  void dispose() {
+    _keyController.dispose();
+    _valueController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.initialKey != null;
+    
+    return AlertDialog(
+      backgroundColor: AppConstants.surfaceColor,
+      title: Text(
+        isEditing ? 'Edit Header' : 'Add Header',
+        style: const TextStyle(color: Colors.white),
+      ),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _keyController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Header Name',
+                hintText: 'e.g., Authorization',
+                labelStyle: TextStyle(color: Colors.grey),
+                hintStyle: TextStyle(color: Colors.grey),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppConstants.primaryColor)),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a header name';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _valueController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Header Value',
+                hintText: 'e.g., Bearer your-token',
+                labelStyle: TextStyle(color: Colors.grey),
+                hintStyle: TextStyle(color: Colors.grey),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppConstants.primaryColor)),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a header value';
+                }
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppConstants.primaryColor,
+          ),
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              widget.onSave(
+                _keyController.text.trim(),
+                _valueController.text.trim(),
+              );
+              Navigator.pop(context);
+            }
+          },
+          child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }

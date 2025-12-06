@@ -218,10 +218,13 @@ class AppProvider extends ChangeNotifier {
     await loadLogs();
   }
 
-  Future<void> updateSettings(String url, List<String> whitelist, int interval) async {
+  Future<void> updateSettings(String url, List<String> whitelist, int interval, {Map<String, String>? customHeaders}) async {
     await storage.setApiUrl(url);
     await storage.setWhitelist(whitelist);
     await storage.setPollingInterval(interval);
+    if (customHeaders != null) {
+      await storage.setCustomHeaders(customHeaders);
+    }
     await checkHealth();
     
     if (_isServiceRunning) {

@@ -10,10 +10,20 @@ class ApiService {
 
   String get _baseUrl => _storage.apiUrl;
 
+  Map<String, String> get _headers {
+    return {
+      'Content-Type': 'application/json',
+      ..._storage.customHeaders,
+    };
+  }
+
   Future<bool> checkHealth() async {
     try {
       // await _storage.addLog('API: Checking health...'); // Too verbose for frequent checks? Maybe keep it.
-      final response = await http.get(Uri.parse('$_baseUrl/health-check'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/health-check'),
+        headers: _headers,
+      );
       debugPrint('Health Checking: ${response.statusCode}');
       if (response.statusCode != 200) {
         await _storage.addLog('API: Health check failed (Status: ${response.statusCode})');
@@ -29,7 +39,10 @@ class ApiService {
   Future<List<dynamic>> fetchMessages() async {
     try {
       await _storage.addLog('API: Fetching messages...');
-      final response = await http.get(Uri.parse('$_baseUrl/messages'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/messages'),
+        headers: _headers,
+      );
       debugPrint('Fetch messages status: ${response.statusCode}');
       
       if (response.statusCode == 200) {
@@ -51,7 +64,7 @@ class ApiService {
       await _storage.addLog('API: Posting message to server...');
       final response = await http.post(
         Uri.parse('$_baseUrl/message'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: jsonEncode(messageData),
       );
       
@@ -74,7 +87,7 @@ class ApiService {
       await _storage.addLog('API: Posting message to server...');
       final response = await http.patch(
         Uri.parse('$_baseUrl/message'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: jsonEncode(messageData),
       );
       
@@ -95,7 +108,10 @@ class ApiService {
   Future<void> triggerCronClean() async {
     try {
       await _storage.addLog('API: Triggering cron clean...');
-      final response = await http.post(Uri.parse('$_baseUrl/cron/clean'));
+      final response = await http.post(
+        Uri.parse('$_baseUrl/cron/clean'),
+        headers: _headers,
+      );
       if (response.statusCode == 200) {
         await _storage.addLog('API: Cron clean triggered');
       } else {
@@ -107,3 +123,4 @@ class ApiService {
     }
   }
 }
+
