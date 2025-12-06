@@ -25,29 +25,6 @@ void main() async {
     isInDebugMode: true, // TODO: Set to false in production
   );
 
-  // Initialize Telephony Listener
-  final telephony = Telephony.instance;
-  await telephony.requestPhoneAndSmsPermissions;
-  telephony.listenIncomingSms(
-    onNewMessage: (SmsMessage message) async {
-      final storage = StorageService();
-      await storage.init();
-      final api = ApiService(storage);
-      
-      final log = 'Received SMS from ${message.address}: ${message.body}';
-      await storage.addLog(log);
-      await storage.incrementReceivedCount();
-      
-      // Post to API
-      await api.postMessage({
-        'address': message.address,
-        'body': message.body,
-        'date': message.date,
-      });
-    },
-    onBackgroundMessage: backgroundMessageHandler,
-  );
-
   runApp(
     MultiProvider(
       providers: [

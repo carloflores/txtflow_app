@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:telephony/telephony.dart' hide NetworkType;
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../background_message_handler.dart';
 
 class AppProvider extends ChangeNotifier {
   final StorageService storage;
@@ -31,6 +33,53 @@ class AppProvider extends ChangeNotifier {
     loadLogs();
     _fetchSystemPhoneNumber();
     _startLogRefresh();
+    _initTelephony();
+  }
+
+  Future<void> _initTelephony() async {
+    final telephony = Telephony.instance;
+    
+    // Check if SMS capable
+    final bool? isCapable = await telephony.isSmsCapable;
+    addLog('Is SMS Capable: $isCapable');
+
+    final bool? result = await telephony.requestPhoneAndSmsPermissions;
+    addLog('Permissions Request Result: $result');
+    
+    if (result != true) {
+      addLog('Permissions not granted!');
+      return;
+    }
+
+    addLog('Setting up listenIncomingSms...');
+    telephony.listenIncomingSms(
+      onNewMessage: (SmsMessage message) async {
+        addLog('Foreground: Received SMS from ${message.address}');
+        
+        // Deduplication check
+        final date = message.date ?? DateTime.now().millisecondsSinceEpoch;
+        final messageId = '${message.address}_${date}_${message.body.hashCode}';
+        
+        if (await storage.isMessageProcessed(messageId)) {
+          addLog('Message already processed: $messageId');
+          return;
+        }
+        await storage.markMessageProcessed(messageId);
+
+        // Post to API
+        await api.postMessage({
+          'address': message.address,
+          'body': message.body,
+          'date': date,
+        });
+        
+        await storage.incrementReceivedCount();
+        await loadLogs();
+      },
+      onBackgroundMessage: backgroundMessageHandler,
+      listenInBackground: true,
+    );
+    addLog('listenIncomingSms setup complete');
   }
 
 
@@ -117,7 +166,31 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> _performPoll() async {
     addLog('Foreground: Polling messages...');
-    await api.fetchMessages();
+    final messages = await api.fetchMessages();
+    
+    if (messages.isNotEmpty) {
+      addLog('Foreground: Found ${messages.length} messages');
+      final telephony = Telephony.instance;
+      
+      for (final msg in messages) {
+        final String address = msg['address'];
+        final String body = msg['body'];
+        final String id = msg['id'];
+        
+        // Send SMS
+        await telephony.sendSms(to: address, message: body);
+        await storage.setLastRecipient(address);
+        await storage.incrementSentCount();
+        
+        addLog('Sent SMS to $address');
+        
+        // Report success
+        await api.updateMessage({'id': id});
+      }
+    } else {
+      addLog('Foreground: No new messages');
+    }
+
     // Update last poll time
     await storage.setLastPollTime(DateTime.now().millisecondsSinceEpoch);
     notifyListeners();

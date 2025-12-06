@@ -69,6 +69,29 @@ class ApiService {
     }
   }
 
+  Future<bool> updateMessage(Map<String, dynamic> messageData) async {
+    try {
+      await _storage.addLog('API: Posting message to server...');
+      final response = await http.patch(
+        Uri.parse('$_baseUrl/message'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(messageData),
+      );
+      
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        await _storage.addLog('API: Message posted successfully');
+        return true;
+      } else {
+        await _storage.addLog('API: Post failed (Status: ${response.statusCode})');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Post message failed: $e');
+      await _storage.addLog('API: Post error: $e');
+      return false;
+    }
+  }
+
   Future<void> triggerCronClean() async {
     try {
       await _storage.addLog('API: Triggering cron clean...');

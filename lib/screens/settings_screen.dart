@@ -89,13 +89,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   labelStyle: TextStyle(color: Colors.grey),
                   enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
                   focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppConstants.primaryColor)),
-                  helperText: 'Minimum 15 minutes (Android limitation)',
+                  helperText: 'Minimum 5 minutes (Android limitation)',
                   helperStyle: TextStyle(color: Colors.grey),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'Please enter an interval';
                   final interval = int.tryParse(value);
-                  if (interval == null || interval < 15) return 'Minimum interval is 15 minutes';
+                  if (interval == null || interval < 5) return 'Minimum interval is 5 minutes';
                   return null;
                 },
               ),

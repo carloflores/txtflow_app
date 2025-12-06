@@ -71,4 +71,21 @@ class StorageService {
   Future<void> setLastPollTime(int timestamp) async {
     await _prefs.setInt('last_poll_time', timestamp);
   }
+
+  // Deduplication logic
+  List<String> get processedMessageIds => _prefs.getStringList('processed_message_ids') ?? [];
+
+  Future<bool> isMessageProcessed(String id) async {
+    final ids = processedMessageIds;
+    return ids.contains(id);
+  }
+
+  Future<void> markMessageProcessed(String id) async {
+    final ids = processedMessageIds;
+    if (!ids.contains(id)) {
+      ids.insert(0, id);
+      if (ids.length > 50) ids.removeLast(); // Keep last 50 IDs
+      await _prefs.setStringList('processed_message_ids', ids);
+    }
+  }
 }

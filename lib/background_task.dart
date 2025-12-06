@@ -53,6 +53,7 @@ void callbackDispatcher() {
         for (final msg in messages) {
           final String address = msg['address'];
           final String body = msg['body'];
+          final String id = msg['id'];
           
           // Send SMS
           await telephony.sendSms(to: address, message: body);
@@ -63,7 +64,8 @@ void callbackDispatcher() {
           debugPrint('Background task: $log');
           await storage.addLog(log);
           
-          // Report success if needed (API dependent, assuming fire-and-forget for now based on requirements)
+          // Report success
+          await api.updateMessage({'id': id});
         }
       }
 
