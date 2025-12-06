@@ -8,6 +8,10 @@ class AppConstants {
   static const String keyWhitelist = 'whitelist';
   static const String keyPollingInterval = 'polling_interval';
   static const String keyCustomHeaders = 'custom_headers';
+  static const String keyDeviceId = 'device_id';
+  static const String keyAutoStart = 'auto_start_service';
+  static const String keyNotificationsEnabled = 'notifications_enabled';
+  static const String keySelectedSimId = 'selected_sim_id';
   
   // Default Values
   static const String defaultApiUrl = 'https://yo.hellotap.app';

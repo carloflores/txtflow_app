@@ -9,6 +9,7 @@ import 'dart:async';
 import '../providers/app_provider.dart';
 import '../utils/constants.dart';
 import 'settings_screen.dart';
+import 'conversations_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -80,6 +81,11 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     }
   }
 
+  int _getUnreadCount(AppProvider provider) {
+    return provider.storage.getConversations()
+        .fold(0, (sum, conv) => sum + conv.unreadCount);
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -103,8 +109,38 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         backgroundColor: AppConstants.surfaceColor,
         foregroundColor: Colors.white,
         actions: [
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.forum),
+                tooltip: 'Messages',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ConversationsScreen()),
+                ).then((_) => setState(() {})),
+              ),
+              if (_getUnreadCount(provider) > 0)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: AppConstants.errorColor,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      _getUnreadCount(provider).toString(),
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
-            icon: const Icon(Icons.message),
+            icon: const Icon(Icons.send),
             tooltip: 'Test SMS',
             onPressed: () => _showTestSmsDialog(context, provider),
           ),
@@ -286,14 +322,106 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Device Details', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Device Details', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: provider.storage.deviceId));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Device ID copied to clipboard')),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppConstants.primaryColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppConstants.primaryColor.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.devices, color: AppConstants.primaryColor, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        provider.storage.deviceId,
+                        style: const TextStyle(
+                          color: AppConstants.primaryColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.copy, color: AppConstants.primaryColor, size: 12),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildDetailItem('System Number', provider.systemPhoneNumber),
+              GestureDetector(
+                onTap: () => _showSimSelectorDialog(context, provider),
+                child: _buildDetailItem(
+                  'System Number', 
+                  provider.selectedSim?.phoneNumber.isNotEmpty == true 
+                      ? provider.selectedSim!.phoneNumber 
+                      : provider.systemPhoneNumber,
+                  showEditIcon: provider.simCards.length > 1,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _showSimSelectorDialog(context, provider),
+                child: _buildDetailItem(
+                  'Active SIM', 
+                  provider.selectedSim?.slotLabel ?? 'Default',
+                  showEditIcon: provider.simCards.length > 1,
+                ),
+              ),
               _buildDetailItem('Last Sent To', provider.lastRecipient),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
               _buildDetailItem('Next Poll', _formatNextPoll(provider.nextPollTime)),
+              if (provider.simCards.length > 1)
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppConstants.accentColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppConstants.accentColor.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.sim_card, color: AppConstants.accentColor, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Switch SIM',
+                          style: const TextStyle(
+                            color: AppConstants.accentColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ],
@@ -312,14 +440,90 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     return '~${minutes}m ${seconds}s';
   }
 
-  Widget _buildDetailItem(String label, String value) {
+  Widget _buildDetailItem(String label, String value, {bool showEditIcon = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+            if (showEditIcon) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.edit, color: AppConstants.accentColor, size: 12),
+            ],
+          ],
+        ),
       ],
+    );
+  }
+
+  void _showSimSelectorDialog(BuildContext context, AppProvider provider) {
+    if (provider.simCards.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No SIM cards detected')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppConstants.surfaceColor,
+        title: Row(
+          children: [
+            const Icon(Icons.sim_card, color: AppConstants.accentColor),
+            const SizedBox(width: 8),
+            const Text('Select SIM Card', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: provider.simCards.map((sim) {
+            final isSelected = provider.selectedSimId == sim.subscriptionId ||
+                (provider.selectedSimId == -1 && sim == provider.simCards.first);
+            
+            return ListTile(
+              leading: Icon(
+                Icons.sim_card,
+                color: isSelected ? AppConstants.accentColor : Colors.grey,
+              ),
+              title: Text(
+                '${sim.slotLabel}: ${sim.label}',
+                style: TextStyle(
+                  color: isSelected ? AppConstants.accentColor : Colors.white,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              subtitle: sim.phoneNumber.isNotEmpty
+                  ? Text(sim.phoneNumber, style: const TextStyle(color: Colors.grey))
+                  : null,
+              trailing: isSelected
+                  ? const Icon(Icons.check_circle, color: AppConstants.accentColor)
+                  : null,
+              onTap: () {
+                provider.setSelectedSim(sim.subscriptionId);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Now using ${sim.slotLabel}: ${sim.label}'),
+                    backgroundColor: AppConstants.accentColor,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+        ],
+      ),
     );
   }
 

@@ -13,6 +13,7 @@ class ApiService {
   Map<String, String> get _headers {
     return {
       'Content-Type': 'application/json',
+      'X-Device-Id': _storage.deviceId,
       ..._storage.customHeaders,
     };
   }

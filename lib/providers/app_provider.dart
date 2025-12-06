@@ -5,11 +5,16 @@ import 'package:workmanager/workmanager.dart';
 import 'package:telephony/telephony.dart' hide NetworkType;
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../services/notification_service.dart';
+import '../services/sim_service.dart';
+import '../services/contact_service.dart';
+import '../models/sms_message.dart';
 import '../background_message_handler.dart';
 
 class AppProvider extends ChangeNotifier {
   final StorageService storage;
   late ApiService api;
+  final NotificationService _notificationService = NotificationService();
   Timer? _logTimer;
 
   bool _isServiceRunning = false;
@@ -27,13 +32,123 @@ class AppProvider extends ChangeNotifier {
   String _systemPhoneNumber = 'Unknown';
   String get systemPhoneNumber => _systemPhoneNumber;
 
+  // SIM card management
+  List<SimCard> _simCards = [];
+  List<SimCard> get simCards => _simCards;
+  
+  int get selectedSimId => storage.selectedSimId;
+  
+  SimCard? get selectedSim {
+    if (_simCards.isEmpty) return null;
+    if (selectedSimId == -1) return _simCards.first; // Default to first SIM
+    return _simCards.firstWhere(
+      (s) => s.subscriptionId == selectedSimId,
+      orElse: () => _simCards.first,
+    );
+  }
+
   AppProvider(this.storage) {
     api = ApiService(storage);
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _notificationService.init();
+    await _notificationService.requestPermission();
+    
     checkHealth();
     loadLogs();
     _fetchSystemPhoneNumber();
     _startLogRefresh();
-    _initTelephony();
+    await loadSimCards(); // Load available SIM cards
+    await _loadContacts(); // Load device contacts for name lookups
+    await _initTelephony();
+    
+    // Auto-start service if enabled
+    if (storage.autoStartService && !_isServiceRunning) {
+      _autoStartService();
+    }
+  }
+
+  Future<void> _loadContacts() async {
+    try {
+      await ContactService.requestPermission();
+      await ContactService.loadContacts();
+      addLog('Contacts loaded: ${ContactService.isLoaded}');
+    } catch (e) {
+      debugPrint('AppProvider: Error loading contacts: $e');
+    }
+  }
+
+  Future<void> loadSimCards() async {
+    try {
+      // Request phone permissions first (needed for SIM access)
+      final telephony = Telephony.instance;
+      final hasPermission = await telephony.requestPhonePermissions;
+      debugPrint('AppProvider: Phone permission granted: $hasPermission');
+      
+      if (hasPermission != true) {
+        debugPrint('AppProvider: Phone permission denied, cannot access SIM cards');
+        addLog('Warning: Phone permission denied - SIM selection unavailable');
+        return;
+      }
+      
+      _simCards = await SimService.getSimCards();
+      debugPrint('AppProvider: Loaded ${_simCards.length} SIM cards');
+      
+      if (_simCards.isEmpty) {
+        debugPrint('AppProvider: No SIM cards returned from native code');
+        addLog('Info: No SIM cards detected');
+      } else {
+        for (final sim in _simCards) {
+          debugPrint('  - ${sim.slotLabel}: ${sim.label} (ID: ${sim.subscriptionId})');
+        }
+        addLog('Detected ${_simCards.length} SIM card(s)');
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('AppProvider: Error loading SIM cards: $e');
+      addLog('Error loading SIM cards: $e');
+    }
+  }
+
+  Future<void> setSelectedSim(int subscriptionId) async {
+    await storage.setSelectedSimId(subscriptionId);
+    final sim = _simCards.firstWhere(
+      (s) => s.subscriptionId == subscriptionId,
+      orElse: () => _simCards.first,
+    );
+    addLog('Selected SIM: ${sim.slotLabel} - ${sim.label}');
+    notifyListeners();
+  }
+
+  /// Send SMS using the selected SIM card
+  Future<bool> sendSmsWithSelectedSim({
+    required String to,
+    required String message,
+  }) async {
+    final simId = selectedSimId;
+    debugPrint('AppProvider: Sending SMS via SIM ID: $simId');
+    
+    try {
+      await SimService.sendSmsWithSim(
+        to: to,
+        message: message,
+        subscriptionId: simId,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('AppProvider: SMS send error: $e');
+      rethrow;
+    }
+  }
+
+  void _autoStartService() {
+    _isServiceRunning = true;
+    addLog('Service auto-started');
+    _registerBackgroundTask();
+    _manageForegroundTimer();
+    notifyListeners();
   }
 
   Future<void> _initTelephony() async {
@@ -54,27 +169,7 @@ class AppProvider extends ChangeNotifier {
     addLog('Setting up listenIncomingSms...');
     telephony.listenIncomingSms(
       onNewMessage: (SmsMessage message) async {
-        addLog('Foreground: Received SMS from ${message.address}');
-        
-        // Deduplication check
-        final date = message.date ?? DateTime.now().millisecondsSinceEpoch;
-        final messageId = '${message.address}_${date}_${message.body.hashCode}';
-        
-        if (await storage.isMessageProcessed(messageId)) {
-          addLog('Message already processed: $messageId');
-          return;
-        }
-        await storage.markMessageProcessed(messageId);
-
-        // Post to API
-        await api.postMessage({
-          'address': message.address,
-          'body': message.body,
-          'date': date,
-        });
-        
-        await storage.incrementReceivedCount();
-        await loadLogs();
+        await _handleIncomingSms(message);
       },
       onBackgroundMessage: backgroundMessageHandler,
       listenInBackground: true,
@@ -82,7 +177,49 @@ class AppProvider extends ChangeNotifier {
     addLog('listenIncomingSms setup complete');
   }
 
+  Future<void> _handleIncomingSms(SmsMessage message) async {
+    addLog('Foreground: Received SMS from ${message.address}');
+    
+    // Deduplication check
+    final date = message.date ?? DateTime.now().millisecondsSinceEpoch;
+    final messageId = '${message.address}_${date}_${message.body.hashCode}';
+    
+    if (await storage.isMessageProcessed(messageId)) {
+      addLog('Message already processed: $messageId');
+      return;
+    }
+    await storage.markMessageProcessed(messageId);
 
+    // Save to local storage for thread view
+    final smsMessage = LocalSmsMessage(
+      id: messageId,
+      address: message.address ?? 'Unknown',
+      body: message.body ?? '',
+      date: date,
+      isIncoming: true,
+      isRead: false,
+    );
+    await storage.saveMessage(smsMessage);
+
+    // Show notification if enabled
+    if (storage.notificationsEnabled) {
+      await _notificationService.showIncomingSmsNotification(
+        address: message.address ?? 'Unknown',
+        body: message.body ?? '',
+      );
+    }
+
+    // Post to API
+    await api.postMessage({
+      'address': message.address,
+      'body': message.body,
+      'date': date,
+    });
+    
+    await storage.incrementReceivedCount();
+    await loadLogs();
+    notifyListeners();
+  }
 
   void _startLogRefresh() {
     _logTimer = Timer.periodic(const Duration(seconds: 2), (_) => loadLogs());
@@ -113,6 +250,18 @@ class AppProvider extends ChangeNotifier {
     
     _manageForegroundTimer();
     notifyListeners();
+  }
+
+  void startService() {
+    if (!_isServiceRunning) {
+      toggleService();
+    }
+  }
+
+  void stopService() {
+    if (_isServiceRunning) {
+      toggleService();
+    }
   }
 
   Future<void> _registerBackgroundTask() async {
@@ -170,22 +319,35 @@ class AppProvider extends ChangeNotifier {
     
     if (messages.isNotEmpty) {
       addLog('Foreground: Found ${messages.length} messages');
-      final telephony = Telephony.instance;
       
       for (final msg in messages) {
         final String address = msg['address'];
         final String body = msg['body'];
         final String id = msg['id'];
         
-        // Send SMS
-        await telephony.sendSms(to: address, message: body);
-        await storage.setLastRecipient(address);
-        await storage.incrementSentCount();
+        // Save outgoing message to storage
+        final smsMessage = LocalSmsMessage(
+          id: '${address}_${DateTime.now().millisecondsSinceEpoch}_out',
+          address: address,
+          body: body,
+          date: DateTime.now().millisecondsSinceEpoch,
+          isIncoming: false,
+          status: 'sent',
+        );
+        await storage.saveMessage(smsMessage);
         
-        addLog('Sent SMS to $address');
-        
-        // Report success
-        await api.updateMessage({'id': id});
+        // Send SMS using selected SIM
+        try {
+          await sendSmsWithSelectedSim(to: address, message: body);
+          await storage.setLastRecipient(address);
+          await storage.incrementSentCount();
+          addLog('Sent SMS to $address');
+          
+          // Report success
+          await api.updateMessage({'id': id});
+        } catch (e) {
+          addLog('Failed to send to $address: $e');
+        }
       }
     } else {
       addLog('Foreground: No new messages');
@@ -233,6 +395,17 @@ class AppProvider extends ChangeNotifier {
       await _registerBackgroundTask();
     }
     
+    notifyListeners();
+  }
+
+  // Settings helpers
+  Future<void> setAutoStart(bool value) async {
+    await storage.setAutoStartService(value);
+    notifyListeners();
+  }
+
+  Future<void> setNotificationsEnabled(bool value) async {
+    await storage.setNotificationsEnabled(value);
     notifyListeners();
   }
 }

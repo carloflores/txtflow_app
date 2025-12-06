@@ -140,6 +140,122 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 24),
               
+              // Service Settings Section
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppConstants.surfaceColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade800),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Service Settings',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildToggleRow(
+                      title: 'Auto-start service',
+                      subtitle: 'Start gateway service when app opens',
+                      value: context.watch<AppProvider>().storage.autoStartService,
+                      onChanged: (value) {
+                        context.read<AppProvider>().setAutoStart(value);
+                      },
+                    ),
+                    const Divider(color: Colors.grey, height: 24),
+                    _buildToggleRow(
+                      title: 'Enable notifications',
+                      subtitle: 'Show notifications for incoming SMS',
+                      value: context.watch<AppProvider>().storage.notificationsEnabled,
+                      onChanged: (value) {
+                        context.read<AppProvider>().setNotificationsEnabled(value);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // SIM Card Selection Section
+              Builder(
+                builder: (context) {
+                  final provider = context.watch<AppProvider>();
+                  final simCards = provider.simCards;
+                  
+                  if (simCards.isEmpty) {
+                    return const SizedBox.shrink(); // Hide if no SIM cards
+                  }
+                  
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppConstants.surfaceColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade800),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.sim_card, color: AppConstants.accentColor, size: 20),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'SIM Card for Sending',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Select which SIM to use for outgoing SMS',
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ...simCards.map((sim) => RadioListTile<int>(
+                          title: Text(
+                            '${sim.slotLabel}: ${sim.label}',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          subtitle: sim.phoneNumber.isNotEmpty
+                              ? Text(
+                                  sim.phoneNumber,
+                                  style: TextStyle(color: Colors.grey.shade500),
+                                )
+                              : null,
+                          value: sim.subscriptionId,
+                          groupValue: provider.selectedSimId == -1
+                              ? simCards.first.subscriptionId
+                              : provider.selectedSimId,
+                          activeColor: AppConstants.accentColor,
+                          onChanged: (value) {
+                            if (value != null) {
+                              provider.setSelectedSim(value);
+                            }
+                          },
+                          contentPadding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                        )),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              
               // Custom Headers Section
               Container(
                 padding: const EdgeInsets.all(16),
@@ -293,6 +409,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return '••••••••';
     }
     return '${value.substring(0, 4)}••••${value.substring(value.length - 4)}';
+  }
+
+  Widget _buildToggleRow({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: AppConstants.accentColor,
+        ),
+      ],
+    );
   }
 }
 
