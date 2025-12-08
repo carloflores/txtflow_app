@@ -93,6 +93,10 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -103,47 +107,47 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
               colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
             ),
             const SizedBox(width: 12),
-            const Text('TxtFlow Gateway'),
+            const Text('Gateway Dashboard'),
           ],
         ),
         backgroundColor: AppConstants.surfaceColor,
         foregroundColor: Colors.white,
         actions: [
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.forum),
-                tooltip: 'Messages',
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ConversationsScreen()),
-                ).then((_) => setState(() {})),
-              ),
-              if (_getUnreadCount(provider) > 0)
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: AppConstants.errorColor,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    child: Text(
-                      _getUnreadCount(provider).toString(),
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.send),
-            tooltip: 'Test SMS',
-            onPressed: () => _showTestSmsDialog(context, provider),
-          ),
+          // Stack(
+          //   children: [
+          //     IconButton(
+          //       icon: const Icon(Icons.forum),
+          //       tooltip: 'Messages',
+          //       onPressed: () => Navigator.push(
+          //         context,
+          //         MaterialPageRoute(builder: (_) => const ConversationsScreen()),
+          //       ).then((_) => setState(() {})),
+          //     ),
+          //     if (_getUnreadCount(provider) > 0)
+          //       Positioned(
+          //         right: 6,
+          //         top: 6,
+          //         child: Container(
+          //           padding: const EdgeInsets.all(4),
+          //           decoration: const BoxDecoration(
+          //             color: AppConstants.errorColor,
+          //             shape: BoxShape.circle,
+          //           ),
+          //           constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+          //           child: Text(
+          //             _getUnreadCount(provider).toString(),
+          //             style: const TextStyle(color: Colors.white, fontSize: 10),
+          //             textAlign: TextAlign.center,
+          //           ),
+          //         ),
+          //       ),
+          //   ],
+          // ),
+          // IconButton(
+          //   icon: const Icon(Icons.send),
+          //   tooltip: 'Test SMS',
+          //   onPressed: () => _showTestSmsDialog(context, provider),
+          // ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/app_provider.dart';
@@ -36,6 +37,8 @@ class _ThreadScreenState extends State<ThreadScreen> {
     super.dispose();
   }
 
+  bool get _isContact => ContactService.isContact(widget.address);
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -64,6 +67,75 @@ class _ThreadScreenState extends State<ThreadScreen> {
         ),
         backgroundColor: AppConstants.surfaceColor,
         foregroundColor: Colors.white,
+        actions: [
+          // Call button
+          IconButton(
+            icon: const Icon(Icons.call),
+            tooltip: 'Call',
+            onPressed: () => ContactService.callNumber(widget.address),
+          ),
+          // Contact menu
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            color: AppConstants.surfaceColor,
+            onSelected: (value) => _handleMenuAction(value, provider),
+            itemBuilder: (context) => [
+              if (_isContact)
+                const PopupMenuItem(
+                  value: 'view_contact',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person, color: Colors.grey, size: 20),
+                      SizedBox(width: 12),
+                      Text('View contact', style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                )
+              else ...[
+                const PopupMenuItem(
+                  value: 'add_contact',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_add, color: AppConstants.accentColor, size: 20),
+                      SizedBox(width: 12),
+                      Text('Add to contacts', style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'add_existing',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_add_alt_1, color: Colors.grey, size: 20),
+                      SizedBox(width: 12),
+                      Text('Add to existing contact', style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ],
+              const PopupMenuItem(
+                value: 'copy_number',
+                child: Row(
+                  children: [
+                    Icon(Icons.copy, color: Colors.grey, size: 20),
+                    SizedBox(width: 12),
+                    Text('Copy number', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete_conversation',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, color: AppConstants.errorColor, size: 20),
+                    SizedBox(width: 12),
+                    Text('Delete conversation', style: TextStyle(color: AppConstants.errorColor)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -165,66 +237,209 @@ class _ThreadScreenState extends State<ThreadScreen> {
     final isIncoming = message.isIncoming;
     final time = DateFormat('HH:mm').format(message.dateTime);
 
-    return Align(
-      alignment: isIncoming ? Alignment.centerLeft : Alignment.centerRight,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isIncoming
-              ? AppConstants.surfaceColor
-              : AppConstants.primaryColor,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isIncoming ? 4 : 16),
-            bottomRight: Radius.circular(isIncoming ? 16 : 4),
+    return GestureDetector(
+      onLongPress: () => _showMessageOptions(message),
+      child: Align(
+        alignment: isIncoming ? Alignment.centerLeft : Alignment.centerRight,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
+          ),
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isIncoming
+                ? AppConstants.surfaceColor
+                : AppConstants.primaryColor,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft: Radius.circular(isIncoming ? 4 : 16),
+              bottomRight: Radius.circular(isIncoming ? 16 : 4),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                message.body,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    time,
+                    style: TextStyle(
+                      color: isIncoming ? Colors.grey : Colors.white70,
+                      fontSize: 11,
+                    ),
+                  ),
+                  if (!isIncoming) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      message.status == 'delivered'
+                          ? Icons.done_all
+                          : message.status == 'sent'
+                              ? Icons.done
+                              : message.status == 'failed'
+                                  ? Icons.error_outline
+                                  : Icons.access_time,
+                      size: 14,
+                      color: message.status == 'failed'
+                          ? AppConstants.errorColor
+                          : Colors.white70,
+                    ),
+                  ],
+                ],
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showMessageOptions(LocalSmsMessage message) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppConstants.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              message.body,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade700,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  time,
-                  style: TextStyle(
-                    color: isIncoming ? Colors.grey : Colors.white70,
-                    fontSize: 11,
+            ListTile(
+              leading: const Icon(Icons.copy, color: Colors.white),
+              title: const Text('Copy', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: message.body));
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Message copied'),
+                    duration: Duration(seconds: 1),
                   ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.forward, color: Colors.white),
+              title: const Text('Forward', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                _showForwardDialog(message);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: AppConstants.errorColor),
+              title: const Text('Delete', style: TextStyle(color: AppConstants.errorColor)),
+              onTap: () {
+                Navigator.pop(context);
+                // TODO: Implement delete message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Delete coming soon')),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showForwardDialog(LocalSmsMessage message) {
+    final phoneController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppConstants.surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.forward, color: AppConstants.primaryColor),
+            SizedBox(width: 12),
+            Text('Forward Message', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppConstants.backgroundColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                message.body,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: phoneController,
+              style: const TextStyle(color: Colors.white),
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                hintText: 'Enter phone number',
+                hintStyle: TextStyle(color: Colors.grey.shade500),
+                prefixIcon: const Icon(Icons.phone, color: Colors.grey),
+                filled: true,
+                fillColor: AppConstants.backgroundColor,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
-                if (!isIncoming) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    message.status == 'delivered'
-                        ? Icons.done_all
-                        : message.status == 'sent'
-                            ? Icons.done
-                            : message.status == 'failed'
-                                ? Icons.error_outline
-                                : Icons.access_time,
-                    size: 14,
-                    color: message.status == 'failed'
-                        ? AppConstants.errorColor
-                        : Colors.white70,
-                  ),
-                ],
-              ],
+              ),
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppConstants.primaryColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              final phone = phoneController.text.trim();
+              if (phone.isNotEmpty) {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ThreadScreen(address: phone),
+                  ),
+                );
+              }
+            },
+            child: const Text('Forward', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
@@ -362,6 +577,165 @@ class _ThreadScreenState extends State<ThreadScreen> {
         setState(() => _isSending = false);
       }
     }
+  }
+
+  void _handleMenuAction(String value, AppProvider provider) async {
+    switch (value) {
+      case 'view_contact':
+        await ContactService.openContact(widget.address);
+        break;
+      case 'add_contact':
+        _showSaveContactDialog();
+        break;
+      case 'add_existing':
+        await ContactService.addToExistingContact(widget.address);
+        await ContactService.refreshContacts();
+        setState(() {});
+        break;
+      case 'copy_number':
+        await Clipboard.setData(ClipboardData(text: widget.address));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Number copied'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+        break;
+      case 'delete_conversation':
+        _showDeleteConversationDialog(provider);
+        break;
+    }
+  }
+
+  void _showSaveContactDialog() {
+    final nameController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppConstants.surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.person_add, color: AppConstants.accentColor),
+            SizedBox(width: 12),
+            Text('Add Contact', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppConstants.backgroundColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone, color: Colors.grey, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.address,
+                    style: TextStyle(color: Colors.grey.shade400),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                hintText: 'Contact name',
+                hintStyle: TextStyle(color: Colors.grey.shade500),
+                prefixIcon: const Icon(Icons.person, color: Colors.grey),
+                filled: true,
+                fillColor: AppConstants.backgroundColor,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppConstants.accentColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isNotEmpty) {
+                Navigator.pop(context);
+                await ContactService.openAddContact(widget.address, name: name);
+                // We don't show success snackbar here because we handed off to another app.
+                // The user will return to this screen after saving (or not).
+                // We could refresh contacts when they return, but for now we rely on the next refresh.
+              }
+            },
+            child: const Text('Open Contacts App', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConversationDialog(AppProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppConstants.surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete, color: AppConstants.errorColor),
+            SizedBox(width: 12),
+            Text('Delete Conversation', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to delete this conversation? This action cannot be undone.',
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppConstants.errorColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              
+              // Delete conversation
+              await provider.storage.deleteConversation(widget.address);
+              
+              if (mounted) {
+                Navigator.pop(context); // Go back to home
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Conversation deleted')),
+                );
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   bool _isSameDay(DateTime a, DateTime b) {

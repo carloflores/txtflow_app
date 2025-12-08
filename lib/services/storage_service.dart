@@ -265,4 +265,65 @@ class StorageService {
     
     return cleaned;
   }
+
+  // Group Messaging Storage
+  static const String _groupsKey = 'message_groups';
+
+  List<Map<String, dynamic>> get _groupsRaw {
+    final String? jsonString = _prefs.getString(_groupsKey);
+    if (jsonString == null || jsonString.isEmpty) {
+      return [];
+    }
+    try {
+      final List<dynamic> decoded = jsonDecode(jsonString);
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  List<Map<String, dynamic>> getGroups() {
+    return _groupsRaw;
+  }
+
+  Map<String, dynamic>? getGroup(String id) {
+    final groups = _groupsRaw;
+    try {
+      return groups.firstWhere((g) => g['id'] == id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> saveGroup(Map<String, dynamic> group) async {
+    final groups = _groupsRaw;
+    final existingIndex = groups.indexWhere((g) => g['id'] == group['id']);
+    
+    if (existingIndex >= 0) {
+      groups[existingIndex] = group;
+    } else {
+      groups.insert(0, group);
+    }
+    
+    await _prefs.setString(_groupsKey, jsonEncode(groups));
+  }
+
+  Future<void> deleteGroup(String id) async {
+    final groups = _groupsRaw;
+    groups.removeWhere((g) => g['id'] == id);
+    await _prefs.setString(_groupsKey, jsonEncode(groups));
+  }
+
+  // Delete conversation and its messages
+  Future<void> deleteConversation(String address) async {
+    final allMessages = messages;
+    final normalized = _normalizeNumber(address);
+    
+    allMessages.removeWhere((m) => _normalizeNumber(m.address) == normalized);
+    
+    await _prefs.setString(
+      _messagesKey,
+      jsonEncode(allMessages.map((m) => m.toJson()).toList()),
+    );
+  }
 }
